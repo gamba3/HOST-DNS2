@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-# SILENT♕GHOST – وحدة المسح للإستخبارات (بدون ألوان، بدون مدخلات)
+# SILENT♕GHOST – وحدة المسح للإستخبارات (نسخة مصححة بالكامل)
 import socket, ssl, urllib.parse, urllib.request, json, re, time
 import concurrent.futures, sys, ipaddress, itertools
 
-# ---------- CONFIG (لا ألوان) ----------
+# ---------- CONFIG ----------
 COMMON_PORTS = [
     21,22,23,25,53,80,110,111,135,139,143,443,445,
     587,636,873,993,995,1080,1433,1521,1723,2082,2083,
@@ -15,7 +15,7 @@ SCAN_TIMEOUT = 1.5
 MAX_WORKERS = 150
 REVERSE_IP_DISPLAY_LIMIT = 30
 
-# ---------- HELPERS (نفس وظائف الأداة الأصلية دون print) ----------
+# ---------- HELPERS ----------
 def parse_target(user_input):
     if '://' not in user_input:
         user_input = 'http://' + user_input
@@ -273,119 +273,110 @@ def dns_records(domain):
         except: continue
     return results
 
-# ---------- التابع الرئيسي المعدل (يُعيد تقرير نصي) ----------
+# ---------- التابع الرئيسي المصحح (تم تغيير اسم الدالة من p إلى add_line) ----------
 def shadow_scan(target_input: str) -> str:
-    """ينفذ كامل فحوصات SILENT♕GHOST ويعيد تقريرًا نصيًا خامًا."""
     output_lines = []
-    p = lambda text: output_lines.append(text)
+    # استخدام اسم مختلف تماماً عن متغيرات الحلقات
+    add_line = lambda text: output_lines.append(text)
 
-    p("👑 SILENT♕GHOST SHADOW REPORT")
-    p("=" * 30)
+    add_line("👑 SILENT♕GHOST SHADOW REPORT")
+    add_line("=" * 30)
 
     host, port, scheme = parse_target(target_input)
-    p(f"Target: {host}:{port} ({scheme})")
+    add_line(f"Target: {host}:{port} ({scheme})")
 
     ip, is_ip = resolve_host(host)
     if not ip:
         return f"ERROR: Cannot resolve {host}"
-    p(f"Resolved IP: {ip}")
+    add_line(f"Resolved IP: {ip}")
 
-    # Geo / ASN
     geo = geo_info(ip)
     asn_str = geo.get('as', 'N/A')
     if 'error' not in geo:
-        p(f"Country: {geo.get('country')} ({geo.get('countryCode')})  | City: {geo.get('city')}, {geo.get('regionName')}")
-        p(f"ISP/Org: {geo.get('isp')} / {geo.get('org')}  | ASN: {asn_str}")
+        add_line(f"Country: {geo.get('country')} ({geo.get('countryCode')})  | City: {geo.get('city')}, {geo.get('regionName')}")
+        add_line(f"ISP/Org: {geo.get('isp')} / {geo.get('org')}  | ASN: {asn_str}")
     else:
-        p(f"Geo: Failed ({geo.get('error')})")
+        add_line(f"Geo: Failed ({geo.get('error')})")
 
-    # Reverse IP
-    p("\n--- Reverse IP Lookup ---")
+    add_line("\n--- Reverse IP Lookup ---")
     rev_sources = multi_source_reverse_ip(ip)
     all_rev = set()
     for doms in rev_sources.values():
         all_rev.update(doms)
     for src, doms in rev_sources.items():
         if doms:
-            p(f"  {src}: {', '.join(doms[:REVERSE_IP_DISPLAY_LIMIT])}")
+            add_line(f"  {src}: {', '.join(doms[:REVERSE_IP_DISPLAY_LIMIT])}")
             if len(doms) > REVERSE_IP_DISPLAY_LIMIT:
-                p(f"    ... and {len(doms)-REVERSE_IP_DISPLAY_LIMIT} more")
+                add_line(f"    ... and {len(doms)-REVERSE_IP_DISPLAY_LIMIT} more")
         else:
-            p(f"  {src}: no results")
-    p(f"Total associated domains: {len(all_rev)}")
+            add_line(f"  {src}: no results")
+    add_line(f"Total associated domains: {len(all_rev)}")
 
-    # ASN Cluster
-    p("\n--- ASN Cluster ---")
+    add_line("\n--- ASN Cluster ---")
     prefixes = asn_network_sample(asn_str)
     if prefixes:
-        p(f"ASN: {asn_str} – Network ranges (sample): {', '.join(prefixes)}")
+        add_line(f"ASN: {asn_str} – Network ranges (sample): {', '.join(prefixes)}")
     else:
-        p(f"ASN: {asn_str} – (ranges unavailable)")
+        add_line(f"ASN: {asn_str} – (ranges unavailable)")
     if all_rev:
-        p("Domains on this IP (first 15): " + ', '.join(sorted(all_rev)[:15]))
+        add_line("Domains on this IP (first 15): " + ', '.join(sorted(all_rev)[:15]))
 
-    # Port Scan
-    p("\n--- Port Scanning ---")
+    add_line("\n--- Port Scanning ---")
     port_results = scan_ports(ip, COMMON_PORTS)
-    open_ports = {p:s for p,s in port_results.items() if s=='open'}
+    open_ports = {prt:state for prt,state in port_results.items() if state=='open'}
     if open_ports:
-        p("Open ports: " + ', '.join(str(p) for p in sorted(open_ports)))
+        add_line("Open ports: " + ', '.join(str(prt) for prt in sorted(open_ports)))
     else:
-        p("No open ports found (stealth mode)")
-    filtered_ports = [p for p,s in port_results.items() if s=='filtered']
+        add_line("No open ports found (stealth mode)")
+    filtered_ports = [prt for prt,state in port_results.items() if state=='filtered']
     if filtered_ports:
-        p(f"Filtered ports: {', '.join(str(p) for p in filtered_ports)}")
+        add_line(f"Filtered ports: {', '.join(str(prt) for prt in filtered_ports)}")
 
-    # Service Detection
     if open_ports:
-        p("\n--- Service Detection ---")
-        for p in sorted(open_ports.keys()):
-            svc = detect_service(ip, p)
-            p(f"  Port {p}: {svc}")
+        add_line("\n--- Service Detection ---")
+        for this_port in sorted(open_ports.keys()):
+            svc = detect_service(ip, this_port)
+            add_line(f"  Port {this_port}: {svc}")
 
-    # HTTP Info
     http_data = None
     if port in open_ports or 80 in open_ports or 443 in open_ports:
-        p("\n--- HTTP Information ---")
+        add_line("\n--- HTTP Information ---")
         http_data = grab_http_info(host, port, scheme)
         if 'error' in http_data:
-            p(f"HTTP grab error: {http_data['error']}")
+            add_line(f"HTTP grab error: {http_data['error']}")
         else:
             if http_data.get('title'):
-                p(f"Title: {http_data['title']}")
+                add_line(f"Title: {http_data['title']}")
             if http_data.get('technologies'):
-                p(f"Technologies: {', '.join(http_data['technologies'])}")
+                add_line(f"Technologies: {', '.join(http_data['technologies'])}")
             for k,v in http_data.get('headers',{}).items():
-                p(f"  {k}: {v}")
+                add_line(f"  {k}: {v}")
 
-    # Subdomain Enumeration (only if domain input)
     subdomains = []
     if not is_ip:
-        p("\n--- Subdomain Enumeration ---")
+        add_line("\n--- Subdomain Enumeration ---")
         subdomains = subdomain_enum(host)
         if subdomains:
-            p(f"Found {len(subdomains)} subdomains: {', '.join(subdomains[:25])}")
+            add_line(f"Found {len(subdomains)} subdomains: {', '.join(subdomains[:25])}")
             if len(subdomains) > 25:
-                p(f"  ... and {len(subdomains)-25} more")
+                add_line(f"  ... and {len(subdomains)-25} more")
         else:
-            p("No subdomains found")
+            add_line("No subdomains found")
 
-    # Firewall Analysis
-    p("\n--- Firewall Heuristics ---")
+    add_line("\n--- Firewall Heuristics ---")
     fw = analyse_firewall(port_results, http_data['headers'] if http_data and 'headers' in http_data else None)
-    p(fw)
+    add_line(fw)
 
-    # DNS Records
     if not is_ip:
-        p("\n--- DNS Records ---")
+        add_line("\n--- DNS Records ---")
         dns = dns_records(host)
         if dns:
             for rtype, recs in dns.items():
                 for rec in recs:
-                    p(f"  {rtype}: {rec}")
+                    add_line(f"  {rtype}: {rec}")
         else:
-            p("No DNS records retrieved")
+            add_line("No DNS records retrieved")
 
-    p("\n" + "="*30)
-    p("✅ SILENT♕GHOST scan complete.")
+    add_line("\n" + "="*30)
+    add_line("✅ SILENT♕GHOST scan complete.")
     return "\n".join(output_lines)
