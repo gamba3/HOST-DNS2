@@ -1,10 +1,12 @@
 import os, sys, logging
-import asyncio          # <-- هذا السطر هو المنقذ
+import asyncio
 from aiohttp import web
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from silent_ghost_module import shadow_scan
+
+logging.basicConfig(level=logging.INFO)
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 RENDER_EXTERNAL_URL = os.environ["RENDER_EXTERNAL_URL"]
@@ -29,6 +31,8 @@ async def handle_target(message: types.Message):
     try:
         result = await asyncio.to_thread(shadow_scan, target)
     except Exception as e:
+        # تسجيل الـ traceback الكامل في سجلات Render
+        logging.exception("فشل shadow_scan")
         result = f"خطأ: {e}"
     if len(result) <= 4000:
         await status.edit_text(result)
@@ -66,5 +70,4 @@ def main():
     web.run_app(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
     main()
